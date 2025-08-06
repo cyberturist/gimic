@@ -198,6 +198,46 @@ groups=$groups
        core=[1-6]
        $end
 
+ScanGrid section
+~~~~~~~~~~~~~~
+
+If the **ScanGrid** section is in the input file and ``calc=scangrid`` is specified at the top, GIMIC will perform a
+series of calculations at different integration plane positions, defined by specific keywords.
+Currently, only rotation of the integration plane (``ScanGrid(rotation)``) is supported.
+The rotation is performed around a vector defined by ``rotation_origin`` and ``rotation_axis``.
+
+XDENS files are expected **only** in subdirectories inside the folder defined by ``xdenses_path``. Exactly two out of the
+three parameters ``max_angle``, ``step``, and ``nsteps`` must be specified. Optionally, scanning can also be performed
+on the total (non-decomposed) densities via ``add_total_to_scan``.
+
+After the scan, average values per group are printed to stdout, and *_scan.dat files are generated containing current
+dependencies (dia, para, total).
+
+Because the contribution of orbitals to the magnetically induced ring current depends on the orientation of the
+integration plane, spatial averaging via rotation is essential. Thus, ``ScanGrid`` calculations combined with density
+decomposition are required for properly evaluating orbital contributions to MIRC strength.
+
+max_angle
+    Maximal angle of rotation in degrees.
+
+step
+    Rotation step in degrees.
+
+nsteps
+    Number of steps
+
+rotation_origin=[0.0, 0.0, 0.0]
+    Rotation vector origin
+
+rotation_axis='Z'
+    Rotation axis: 'X', 'Y' or 'Z'.
+
+xdenses_path="XDENSes"
+    Path to XDENS folders (must exist, even if empty)
+
+add_total_to_scan=on
+    include total XDENS in scan
+
 Advanced section
 -----------------
 

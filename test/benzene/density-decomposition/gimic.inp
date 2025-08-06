@@ -22,9 +22,8 @@ Grid(base) {                    # define grid orthogonal to a bond
 DensityDecomposition {
    $groups                  # Orbital indexes starts from 1
         only_pi_orbitals           = [17, 20-21] # Grouped density pi orbitals of benzene
-#        all
     $end
-    cdens_calc   = on
+    cdens_calc   = off
     mofile = "aomix.in"
 }
 

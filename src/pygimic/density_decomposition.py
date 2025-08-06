@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-
+from math import factorial, sqrt, comb
+from datetime import datetime
 import numpy as np
 import contextlib
 import warnings
@@ -10,10 +11,20 @@ import time
 import sys
 import os
 import re
-from math import factorial, sqrt, comb
 
 BOHR2ANGST = 0.52917726
 OCC_TOL = 1e-4
+
+DD_BANNER = (
+    "\n"
+    " ****************************************************************\n"
+    " ***                                                          ***\n"
+    " ***             GIMIC – Density Decomposition                ***\n"
+    " ***                                                          ***\n"
+    " ****************************************************************\n"
+    f" {datetime.now():%a %b %d %H:%M:%S %Y}\n"
+    "\n"
+)
 
 cart_nbf_per_l = {'s': 1, 'p': 3, 'd': 6, 'f': 10, 'g': 15, 'h': 21}
 spher_nbf_per_l = {'s': 1, 'p': 3, 'd': 5, 'f': 7, 'g': 9, 'h': 11}
@@ -176,7 +187,7 @@ class Calculator:
         # self.c2s = self.cartesian_to_spherical_matrix()
         self.cache = {}
 
-    def SortShells_by_l(self):
+    def sort_shells_by_l(self):
         """ Sort shells first by l, then by atom"""
         shell_per_atom = np.array([cart_nbf_per_l[s.l]
                                    for a in self.atoms
@@ -194,7 +205,7 @@ class Calculator:
         final_idx = idces1[idces2]
         return final_idx
 
-    def SortShells_by_atom(self):
+    def sort_shells_by_atom(self):
         """ Sort shells first by atoms, then by l"""
         shell_per_atom = np.array([cart_nbf_per_l[s.l] for a in atom_list for s in a.basis])
         atom_per_shell = np.array([a.number for a in atom_list for s in a.basis])
@@ -378,7 +389,7 @@ def index_str(str, word, number=0):
             return i
 
 
-def ReadMOL(fname):
+def read_MOL(fname):
     """
     Reads MOL file and returns a list of Atom objects.
     """
@@ -435,14 +446,14 @@ class Turbomole:
         self.xdens_fname = xdens_fname
         self.aomix_fname = aomix_fname
         if self.aomix_fname is not None:
-            self.ReadAOMix()
+            self.read_AOMix()
         norm = self.C.T @ self.S @ self.C
         if not (np.isclose(np.trace(norm), self.n_sao, atol=1e-8)):
             warnings.warn(f"Tr(C.T @ S @ C) = {np.trace(norm)} is not fulfilled with accuracy 1e-8 "
                           f"for matrices from {self.aomix_fname}")
-        self.ReadDensity()
+        self.read_density()
 
-    def ReadAOMix(self):
+    def read_AOMix(self):
         mos = []
         irrep_list = []
         energy_list = []
@@ -533,7 +544,7 @@ class Turbomole:
             sys.exit(1)
 
 
-    def ReadDensity(self):
+    def read_density(self):
         """
         Get the density matrix
         TM 7.6 ['CAODENS', 'XCAODENS"]
@@ -555,7 +566,7 @@ class Turbomole:
             sys.exit(1)
 
 
-def DecomposeAndWriteXDENSes(workdir, mo_groups_dict, n_occ, n_sao, dD_MO, tmat, C,
+def decompose_and_writeXDENSes(workdir, mo_groups_dict, n_occ, n_sao, dD_MO, tmat, C,
                               dirname='XDENSes', basis_fname='MOL'):
     """
     Decompose density matrices and write XDENS files per group.
@@ -605,7 +616,7 @@ def DecomposeAndWriteXDENSes(workdir, mo_groups_dict, n_occ, n_sao, dD_MO, tmat,
         try:
             with open(os.path.join(group_dir, "XDENS"), 'w') as f:
                 for mat in D_AO_ortho:
-                    for e in mat.flatten():
+                    for e in mat.T.flatten():
                         f.write(f"{e:0.14E}\n")
                     f.write('\n')
         except Exception as e:
@@ -634,7 +645,7 @@ def parse_groups_from_inkeys(dd_sect, tm):
 
             if line == 'all':
                 for i in tm.occ_mo_list:
-                    name = tm.irrep_list[i]
+                    name = f"{i + 1}_" + tm.irrep_list[i]
                     if tm.irrep_list[i] in groups.keys():
                         name += '_1'
                     groups[name] = np.asarray([i], int)
@@ -676,13 +687,13 @@ def sanity(tm, groups):
     norm = tm.C.T @ tm.S @ tm.C
     print(f" Tr(C.T S C) = {np.trace(norm): 7.5e}, n_sao = {tm.n_sao}.", flush=True)
     if not np.isclose(np.trace(norm), tm.n_sao, atol=1e-8):
-        print("       Tr(C.T S C) differs from n_sao by >1e‑8 ")
+        print("       Tr(C.T S C) differs from n_sao by >1e-8 ")
 
     # Check if virtual orbitals are occupied by user input
     fail_flag = False
     for gdir, v in groups.items():
         if not all(i in tm.occ_mo_list for i in v):
-            sys.stderr.write(f"Group '{gdir}' contains not occupied orbitals: {v}.\n")
+            sys.stderr.write(f"Group '{gdir}' contains not occupied orbitals: {v + 1}.\n")
             fail_flag = True
     if fail_flag:
         sys.exit(1)
@@ -763,22 +774,21 @@ def parse_index_list(lst):
             raise ValueError(f"Invalid group entry: {item}")
     return np.array(result)
 
-# ----------------------------------------------------------------------
 # main entry for gimic
-# ----------------------------------------------------------------------
 def run(dd_sect, args, inkeys):
     """
-    Decompose the density into user‑defined MO groups and, if requested,
+    Decompose the density into user-defined MO groups and, if requested,
     run a cdens calculation for every group.
     """
-    print(f" Density decomposition started.", flush=True)
+    print(DD_BANNER, end="")
 
     # 1. Parse user input
     workdir, aomix, xdens, mol, basis_fname = resolve_paths(dd_sect, args, inkeys)
     # print(f" Workdir: {workdir}", flush=True)
     # print(f" Input files:\n  AOMIX: {aomix}\n  XDENS: {xdens}\n  MOL: {mol}", flush=True)
 
-    do_cdens = dd_sect.getkw('cdens_calc')[0].lower() in ('1', 'yes', 'true', 'on')
+    do_cdens = (dd_sect.getkw('cdens_calc')[0].lower() in ('1', 'yes', 'true', 'on')
+                and inkeys.getkw('calc')[0] == 'cdens')
     if do_cdens:
         print(f" cdens calculations enabled for each group.", flush=True)
     else:
@@ -786,13 +796,13 @@ def run(dd_sect, args, inkeys):
 
     # 2. Read Turbomole files
     tm = Turbomole(workdir, aomix, xdens)
-    atom_list = ReadMOL(mol)
+    atom_list = read_MOL(mol)
     mol_integrator = Calculator(atom_list)
     if getattr(tm, 'S', None) is None:
         tm.S = mol_integrator.compute_overlap_matrix()
 
     # 3. Form matrix to make reorder
-    l_order = mol_integrator.SortShells_by_l()
+    l_order = mol_integrator.sort_shells_by_l()
     tmat = np.eye(tm.n_cao)[l_order, :]
 
     tm.densities = np.array([tm.C.T @ tm.S @ (tmat.T @ D @ tmat) @ tm.S @ tm.C
@@ -813,8 +823,8 @@ def run(dd_sect, args, inkeys):
     sanity(tm, groups)
 
     # 6. Prepare and write XDENSes
-    DecomposeAndWriteXDENSes(workdir, groups, tm.nocc, tm.n_sao, tm.densities[1:], tmat, tm.C,
-                             basis_fname=basis_fname)
+    decompose_and_writeXDENSes(workdir, groups, tm.nocc, tm.n_sao, tm.densities[1:], tmat, tm.C,
+                               basis_fname=basis_fname)
     # 7. optional cdens runs
     if do_cdens:
         # Run the user file gimic.inp in each group directory, changing only 'basis' and 'xdens'.
@@ -831,13 +841,13 @@ if __name__ == "__main__":
 
     # 1. read Turbomole data
     tm = Turbomole(workdir, aomix_fname)
-    atoms = ReadMOL('MOL')
+    atoms = read_MOL('MOL')
     integ = Calculator(atoms)
     if getattr(tm, "S", None) is None:
         tm.S = integ.compute_overlap_matrix()
 
     # 2. Build transformation
-    l_order = integ.SortShells_by_l()
+    l_order = integ.sort_shells_by_l()
     tmat = np.eye(tm.n_cao)[l_order, :]
     tm.densities = np.array([tm.C.T @ tm.S @ (tmat.T @ D @ tmat) @ tm.S @ tm.C
                              for D in tm.densities])
@@ -862,9 +872,9 @@ if __name__ == "__main__":
         print("groups.yaml not found, using all occupied orbitals.")
         groups = {f"{i+1}_{tm.irrep_list[i]}": [i+1] for i in tm.occ_mo_list}
 
-    # 4. sanity‑check
+    # 4. sanity-check
     sanity(tm, groups)
 
     # 6. Prepare and write XDENSes
-    DecomposeAndWriteXDENSes(workdir, groups, tm.nocc, tm.n_sao, tm.densities[1:], tmat, tm.C,
-                             basis_fname=os.path.join(workdir, 'MOL'))
+    decompose_and_writeXDENSes(workdir, groups, tm.nocc, tm.n_sao, tm.densities[1:], tmat, tm.C,
+                               basis_fname=os.path.join(workdir, 'MOL'))

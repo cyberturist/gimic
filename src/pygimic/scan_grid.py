@@ -146,10 +146,14 @@ def process_group(group, angles, base_grid, init_euler, rot_axis_idx,
             elapsed = time.perf_counter() - start_group
             eta = elapsed / done * (n_ang - done) if done < n_ang else 0.0
             perc = done / n_ang
-            sys.stdout.write(
-                f"\r[{group:<15}] {done}/{n_ang} "
-                f"({perc:5.1%})  ETA {eta:6.1f}s"
-            )
+            line = f"[{group:<15}] {done}/{n_ang} ({perc:5.1%})  ETA {eta:6.1f}s"
+            # print in terminal
+            if sys.stdout.isatty():
+                sys.stdout.write("\r" + line)
+                sys.stdout.flush()
+            # write in file
+            else:
+                sys.stdout.write(line + "\n")
             sys.stdout.flush()
 
     elapsed = time.perf_counter() - start_group
@@ -168,7 +172,12 @@ def run(scan_sect, args, inkeys):
 
     if not os.path.isdir(xdens_root):
         sys.stderr.write(f"XDENSes directory not found: {xdens_root}\n")
-        sys.exit(1)
+        if scan_sect.getkw('add_total_to_scan')[0] == 'True':
+            os.makedirs(os.path.join(xdens_root))
+            sys.stderr.write(f"XDENSes directory made in: {xdens_root}\n")
+        else:
+            sys.stderr.write(f"XDENSes for scanning not found.\n")
+            sys.exit(1)
 
     # 1. collect MO‑group directories
     groups = collect_groups(xdens_root,
